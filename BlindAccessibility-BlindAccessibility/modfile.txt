@@ -1,0 +1,5 @@
+Import BlindAccess.lua
+
+To Scripts/Main.lua
+Import register.lua
+Import config.lua
