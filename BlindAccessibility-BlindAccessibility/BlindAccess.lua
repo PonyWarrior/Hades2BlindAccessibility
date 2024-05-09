@@ -20,6 +20,10 @@ local function setupData()
 		BlindAccesibilityDoorMenu = {
 			Components = {},
 			Name = "BlindAccesibilityDoorMenu"
+		},
+		BlindAccesibilityStoreMenu = {
+			Components = {},
+			Name = "BlindAccesibilityStoreMenu"
 		}
 	})
 end
@@ -333,6 +337,18 @@ OnControlPressed { "Codex", function(triggerArgs)
 		else
 			return
 		end
+	elseif IsScreenOpen("BlindAccessibilityRewardMenu") then
+		local curMap = mod.GetMapName()
+		if not string.find(curMap, "Shop") and not string.find(curMap, "PreBoss") and not string.find(curMap, "D_Hub") then
+			return
+		end
+		if CurrentRun.CurrentRoom.Store == nil then
+			return
+		elseif mod.NumUseableObjects(CurrentRun.CurrentRoom.Store.SpawnedStoreItems or MapState.SurfaceShopItems) == 0 then
+			return
+		end
+		thread(mod.CloseRewardMenu, ActiveScreens.BlindAccessibilityRewardMenu)
+		mod.OpenStoreMenu(CurrentRun.CurrentRoom.Store.SpawnedStoreItems or MapState.SurfaceShopItems)
 	end
 end }
 
@@ -787,7 +803,7 @@ function mod.AddNPCs(objects)
 				elseif GetDistance({ Id = npc["ObjectId"], DestinationId = 422028 }) < 100 then --Hades on his throne
 					npc["DestinationOffsetY"] = 150
 				end
-			elseif npcs[i].Name == "NPC_Cerberus_01" and mod.GetMapName() == "Hub_Main" and GetDistance({ Id = npc["ObjectId"], DestinationId = 422028 }) > 500 then                                                                                                --Cerberus not present in house
+			elseif npcs[i].Name == "NPC_Cerberus_01" and mod.GetMapName() == "Hub_Main" and GetDistance({ Id = npc["ObjectId"], DestinationId = 422028 }) > 500 then                                                                                                 --Cerberus not present in house
 				skip = true
 			elseif npcs[i].Name == "NPC_Cerberus_Field_01" and TableLength(MapState.OfferedExitDoors) == 1 and CollapseTable(MapState.OfferedExitDoors)[1].Room.Name:find("D_Boss", 1, true) == 1 and GetDistance({ Id = npc["ObjectId"], DestinationId = 551569 }) == 0 then --Cerberus in Styx after having been given satyr sack
 				skip = true
@@ -911,8 +927,8 @@ function mod.ObjectAlreadyPresent(object, objects)
 			found = true
 		end
 	end
-	if CurrentRun and CurrentRun.CurrentRoom and CurrentRun.CurrentRoom.Store and NumUseableObjects(CurrentRun.CurrentRoom.Store.SpawnedStoreItems) > 0 then
-		for k, v in pairs(CurrentRun.CurrentRoom.Store.SpawnedStoreItems) do
+	if CurrentRun and CurrentRun.CurrentRoom and CurrentRun.CurrentRoom.Store and mod.NumUseableObjects(CurrentRun.CurrentRoom.Store.SpawnedStoreItems or MapState.SurfaceShopItems) > 0 then
+		for k, v in pairs(CurrentRun.CurrentRoom.Store.SpawnedStoreItems or MapState.SurfaceShopItems) do
 			if object.ObjectId == v.ObjectId and v.Name ~= "ForbiddenShopItem" then
 				found = true
 			end
@@ -1064,7 +1080,7 @@ function mod.CreateRewardButtons(screen, rewards)
 		if reward.Args ~= nil and reward.Args.ForceLootName then
 			displayText = reward.Args.ForceLootName:gsub("Upgrade", ""):gsub("Drop", "")
 		end
-		displayText = nameToPreviewName[displayText:gsub("Drop", ""):gsub("StoreReward", "")] or displayText
+		displayText = displayText:gsub("Drop", ""):gsub("StoreReward", "") or displayText
 		displayText = (displayText .. mod.GetWeaponDisplayConditions(reward.Name)) or displayText
 		CreateTextBox({
 			Id = components[buttonKey].Id,
@@ -1114,6 +1130,274 @@ function mod.CloseRewardMenu(screen, button)
 	notifyExistingWaiters(screen.Name)
 	ShowCombatUI(screen.Name)
 end
+
+-- OnControlPressed { "ScrollDown", function(triggerArgs)
+-- 	local curMap = GetMapName({})
+-- 	if not string.find(curMap, "Shop") and not string.find(curMap, "PreBoss") and not string.find(curMap, "D_Hub") then
+-- 		return
+-- 	end
+-- 	if CurrentRun.CurrentRoom.Store == nil then
+-- 		return
+-- 	elseif mod.NumUseableObjects(CurrentRun.CurrentRoom.Store.SpawnedStoreItems or MapState.SurfaceShopItems) == 0 then
+-- 		return
+-- 	end
+-- 	if IsScreenOpen("TraitTrayScreen") then
+-- 		thread(TraitTrayScreenClose, ActiveScreens.TraitTrayScreen)
+-- 		mod.OpenStoreMenu(CurrentRun.CurrentRoom.Store.SpawnedStoreItems or MapState.SurfaceShopItems)
+-- 	end
+-- end }
+
+function mod.NumUseableObjects(objects)
+	local count = 0
+	if objects ~= nil then
+		for k, object in pairs(objects) do
+			if object.ObjectId ~= nil and IsUseable({ Id = object.ObjectId }) and object.Name ~= "ForbiddenShopItem" then
+				count = count + 1
+			end
+		end
+	end
+	return count
+end
+
+function mod.OpenStoreMenu(items)
+	local screen = DeepCopyTable(ScreenData.BlindAccesibilityStoreMenu)
+
+	if IsScreenOpen(screen.Name) then
+		return
+	end
+	OnScreenOpened(screen)
+	HideCombatUI(screen.Name)
+
+	PlaySound({ Name = "/SFX/Menu Sounds/ContractorMenuOpen" })
+	local components = screen.Components
+
+	components.ShopBackgroundDim = CreateScreenComponent({ Name = "rectangle01", Group = "Asses_UI_Store" })
+
+	components.CloseButton = CreateScreenComponent({ Name = "ButtonClose", Group = "Asses_UI_Store_Backing", Scale = 0.7 })
+	Attach({ Id = components.CloseButton.Id, DestinationId = components.ShopBackgroundDim.Id, OffsetX = 0, OffsetY = 440 })
+	components.CloseButton.OnPressedFunctionName = "BlindAccess.CloseItemScreen"
+	components.CloseButton.ControlHotkey = "Cancel"
+
+	SetScale({ Id = components.ShopBackgroundDim.Id, Fraction = 4 })
+	SetColor({ Id = components.ShopBackgroundDim.Id, Color = { 0, 0, 0, 1 } })
+
+	mod.CreateItemButtons(screen, items)
+	screen.KeepOpen = true
+	HandleScreenInput(screen)
+	SetConfigOption({ Name = "ExclusiveInteractGroup", Value = "Asses_UI_Store" })
+end
+
+local nameToPreviewName = {
+	["HermesUpgrade"] = "Hermes",
+	["MetaPoint"] = "25 Darkness",
+	["Gem"] = "20 Gemstones",
+	["LockKey"] = "Chthonic Key",
+	["Gift"] = "Nectar",
+	["RoomRewardMaxHealth"] = "Centaur Heart",
+	["StackUpgrade"] = "Pom of Power",
+	["StackUpgradeRare"] = "Double Pom of Power",
+	["WeaponUpgrade"] = "Daedalus Hammer",
+	["ChaosWeaponUpgrade"] = "Anvil of Fates",
+	["RoomRewardMoney"] = "Obols",
+	["SuperLockKey"] = "Titan Blood",
+	["SuperGem"] = "Diamond",
+	["SuperGift"] = "Ambrosia",
+	["BlindBoxLoot"] = "Random God Boon",
+	["RoomRewardHeal"] = "Food",
+	["RandomStack"] = "Pom Slice",
+}
+
+function mod.CreateItemButtons(screen, items)
+	local xPos = 960
+	local startY = 235
+	local yIncrement = 75
+	local curY = startY
+	local components = screen.Components
+	local isFirstButton = true
+	components.statsTextBacking = CreateScreenComponent({
+		Name = "BlankObstacle",
+		Group = "Asses_UI_Store",
+		Scale = 1,
+		X = xPos,
+		Y = curY
+	})
+	CreateTextBox({
+		Id = components.statsTextBacking.Id,
+		Text = "Health: " .. (CurrentRun.Hero.Health or 0) .. "/" .. (CurrentRun.Hero.MaxHealth or 0),
+		FontSize = 24,
+		Width = 360,
+		OffsetX = 0,
+		OffsetY = 0,
+		Color = Color.White,
+		Font = "P22UndergroundSCMedium",
+		Group = "Asses_UI_Store",
+		ShadowBlur = 0,
+		ShadowColor = { 0, 0, 0, 1 },
+		ShadowOffset = { 0, 2 },
+		Justification = "Left",
+	})
+	curY = curY + yIncrement
+	CreateTextBox({
+		Id = components.statsTextBacking.Id,
+		Text = "Obols: " .. ((CurrentRun or { Money = 0 }).Money or 0),
+		FontSize = 24,
+		Width = 360,
+		OffsetX = 0,
+		OffsetY = yIncrement,
+		Color = Color.White,
+		Font = "P22UndergroundSCMedium",
+		Group = "Asses_UI_Store",
+		ShadowBlur = 0,
+		ShadowColor = { 0, 0, 0, 1 },
+		ShadowOffset = { 0, 2 },
+		Justification = "Left",
+	})
+	curY = curY + yIncrement
+	for k, item in pairs(items) do
+		if IsUseable({ Id = item.ObjectId }) and item.Name ~= "ForbiddenShopItem" then
+			local displayText = item.Name
+			local buttonKey = "AssesShopMenuButton" .. k .. displayText
+			components[buttonKey] =
+				CreateScreenComponent({
+					Name = "ButtonDefault",
+					Group = "Asses_UI_Store",
+					Scale = 0.8,
+					X = xPos,
+					Y = curY
+				})
+			components[buttonKey].index = k
+			components[buttonKey].item = item
+			components[buttonKey].OnPressedFunctionName = "BlindAccess.MoveToItem"
+			displayText = displayText:gsub("Drop", ""):gsub("StoreReward", "") or displayText
+			CreateTextBox({
+				Id = components[buttonKey].Id,
+				Text = displayText,
+				FontSize = 24,
+				OffsetX = -520,
+				OffsetY = 0,
+				Color = Color.White,
+				Font = "P22UndergroundSCMedium",
+				Group = "Asses_UI_Store",
+				ShadowBlur = 0,
+				ShadowColor = { 0, 0, 0, 1 },
+				ShadowOffset = { 0, 2 },
+				Justification = "Left",
+			})
+			CreateTextBox({
+				Id = components[buttonKey].Id,
+				Text = item.ResourceCosts.Money .. " Gold",
+				FontSize = 24,
+				OffsetX = -520,
+				OffsetY = 30,
+				Color = Color.White,
+				Font = "P22UndergroundSCMedium",
+				Group = "Asses_UI_Store",
+				ShadowBlur = 0,
+				ShadowColor = { 0, 0, 0, 1 },
+				ShadowOffset = { 0, 2 },
+				Justification = "Left",
+			})
+			if isFirstButton then
+				TeleportCursor({ OffsetX = xPos, OffsetY = curY })
+				isFirstButton = false
+			end
+			curY = curY + yIncrement
+		end
+	end
+end
+
+function mod.MoveToItem(screen, button)
+	PlaySound({ Name = "/SFX/Menu Sounds/ContractorItemPurchase" })
+	mod.CloseItemScreen(screen, button)
+	local ItemID = button.item.ObjectId
+	if ItemID ~= nil then
+		Teleport({ Id = CurrentRun.Hero.ObjectId, DestinationId = ItemID })
+	end
+end
+
+function mod.CloseItemScreen(screen, button)
+	SetConfigOption({ Name = "ExclusiveInteractGroup", Value = nil })
+	OnScreenCloseStarted(screen)
+	CloseScreen(GetAllIds(screen.Components), 0.15)
+	OnScreenCloseFinished(screen)
+	notifyExistingWaiters(screen.Name)
+	ShowCombatUI(screen.Name)
+end
+
+ModUtil.Path.Override("SpawnStoreItemInWorld", function(itemData, kitId)
+	local spawnedItem = nil
+	if itemData.Name == "WeaponUpgradeDrop" then
+		spawnedItem = CreateWeaponLoot({
+			SpawnPoint = kitId,
+			ResourceCosts = itemData.ResourceCosts or
+				GetProcessedValue(ConsumableData.WeaponUpgradeDrop.ResourceCosts),
+			DoesNotBlockExit = true,
+			SuppressSpawnSounds = true,
+		})
+	elseif itemData.Name == "ShopHermesUpgrade" then
+		spawnedItem = CreateHermesLoot({
+			SpawnPoint = kitId,
+			ResourceCosts = itemData.ResourceCosts or
+				GetProcessedValue(ConsumableData.ShopHermesUpgrade.ResourceCosts),
+			DoesNotBlockExit = true,
+			SuppressSpawnSounds = true,
+			BoughtFromShop = true,
+			AddBoostedAnimation =
+				itemData.AddBoostedAnimation,
+			BoonRaritiesOverride = itemData.BoonRaritiesOverride
+		})
+		spawnedItem.CanReceiveGift = false
+		SetThingProperty({ Property = "SortBoundsScale", Value = 1.0, DestinationId = spawnedItem.ObjectId })
+	elseif itemData.Name == "ShopManaUpgrade" then
+		spawnedItem = CreateManaLoot({
+			SpawnPoint = kitId,
+			ResourceCosts = itemData.ResourceCosts or
+				GetProcessedValue(ConsumableData.ShopManaUpgrade.ResourceCosts),
+			DoesNotBlockExit = true,
+			SuppressSpawnSounds = true,
+			BoughtFromShop = true,
+			AddBoostedAnimation =
+				itemData.AddBoostedAnimation,
+			BoonRaritiesOverride = itemData.BoonRaritiesOverride
+		})
+		spawnedItem.CanReceiveGift = false
+		SetThingProperty({ Property = "SortBoundsScale", Value = 1.0, DestinationId = spawnedItem.ObjectId })
+	elseif itemData.Type == "Consumable" then
+		local consumablePoint = SpawnObstacle({ Name = itemData.Name, DestinationId = kitId, Group = "Standing" })
+		local upgradeData = GetRampedConsumableData(ConsumableData[itemData.Name] or LootData[itemData.Name])
+		spawnedItem = CreateConsumableItemFromData(consumablePoint, upgradeData, itemData.CostOverride)
+		spawnedItem.CanDuplicate = false
+		spawnedItem.CanReceiveGift = false
+		ApplyConsumableItemResourceMultiplier(CurrentRun.CurrentRoom, spawnedItem)
+		ExtractValues(CurrentRun.Hero, spawnedItem, spawnedItem)
+	elseif itemData.Type == "Boon" then
+		itemData.Args.SpawnPoint = kitId
+		itemData.Args.DoesNotBlockExit = true
+		itemData.Args.SuppressSpawnSounds = true
+		itemData.Args.SuppressFlares = true
+		spawnedItem = GiveLoot(itemData.Args)
+		spawnedItem.CanReceiveGift = false
+		SetThingProperty({ Property = "SortBoundsScale", Value = 1.0, DestinationId = spawnedItem.ObjectId })
+	end
+	if spawnedItem ~= nil then
+		spawnedItem.SpawnPointId = kitId
+		if not itemData.PendingShopItem then
+			SetObstacleProperty({ Property = "MagnetismWhileBlocked", Value = 0, DestinationId = spawnedItem.ObjectId })
+			spawnedItem.UseText = spawnedItem.PurchaseText or "Shop_UseText"
+			spawnedItem.IconPath = spawnedItem.TextIconPath or spawnedItem.IconPath
+			table.insert(CurrentRun.CurrentRoom.Store.SpawnedStoreItems,
+				--MOD START
+				{ KitId = kitId, ObjectId = spawnedItem.ObjectId, ResourceCosts = spawnedItem.ResourceCosts, Name = itemData.Name })
+			--MOD END
+		else
+			MapState.SurfaceShopItems = MapState.SurfaceShopItems or {}
+			table.insert(MapState.SurfaceShopItems, spawnedItem.Name)
+		end
+		return spawnedItem
+	else
+		DebugPrint({ Text = " Not spawned?!" .. itemData.Name })
+	end
+end, mod)
 
 mod.Internal = ModUtil.UpValues(function()
 	return setupData
