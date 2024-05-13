@@ -114,7 +114,7 @@ end
 
 function mod.CreateAssesDoorButtons(screen, doors)
 	local xPos = 960
-	local startY = 435
+	local startY = 180
 	local yIncrement = 75
 	local curY = startY
 	local components = screen.Components
@@ -302,7 +302,7 @@ end
 
 ModUtil.Path.Wrap("ExitDoorUnlockedPresentation", function(baseFunc, exitDoor)
 	local ret = baseFunc(exitDoor)
-	if TableLength(MapState.OfferedExitDoors) == 1 and CollapseTable(MapState.OfferedExitDoors)[1].Room.Name:find("D_Boss", 1, true) == 1 then
+	if TableLength(MapState.OfferedExitDoors) == 1 then
 		if GetDistance({ Id = 547487, DestinationId = 551569 }) == 0 then
 			return ret
 		elseif GetDistance({ Id = 547487, DestinationId = 551569 }) ~= 0 and GetDistance({ Id = CurrentRun.Hero.ObjectId, DestinationId = 547487 }) < 1000 then
